@@ -10,4 +10,11 @@ After controlling for development indicators, a one-unit increase in poverty rat
 
 Data
 Source: CATF Africa dataset
-Key variables: poverty_rate, electrification_rate, urban_access_electricity_rate, rural_access_electricity_rate, gdp (per capita, USD), SAIDI, SAIFI
+
+Key variables: 
+poverty_rate
+electrification_rate
+urban_access_electricity_rate
+rural_access_electricity_rate
+gdp (per capita, USD)
+SAIDI, SAIFI
