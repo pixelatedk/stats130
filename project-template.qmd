@@ -1,0 +1,622 @@
+---
+title: "Socioeconomy and Electricity"
+subtitle: "Relationships between socioeconomic conditions and electricity across African countries"
+author: "Yi Xuan Su, Salma Chaoui, Nika Ryzhkova, Vicky Kuang | Group 0214-C"
+date: today
+format:
+  beamer:
+    theme: Madrid
+    colortheme: default
+    fonttheme: serif
+    aspectratio: 169
+editor: visual
+---
+
+```{r setup, include=FALSE}
+library(gridExtra)
+library(tidyverse)
+library(knitr)
+library(cowplot)
+library(broom)
+knitr::opts_chunk$set(
+echo = FALSE,
+include = TRUE,
+warning = FALSE,
+message = FALSE,
+results = "markup",
+fig.width = 6,
+fig.height = 3.5,
+fig.align = "center",
+out.width = "80%"
+)
+```
+
+```{r load-data, echo=FALSE}
+### Read in data
+CATF_data <- read_csv("CATF_data.csv")
+```
+
+```{r clean_data, include=FALSE}
+
+## Clean the data 
+
+## E.g., remove unrealistic populations
+#CATF_data |> arrange(population) |> View()
+
+#CATF_data <- CATF_data |> filter(population > 100)
+## Alternatively, we could convert them to the correct values for each country by 
+## seeing roughly what the population values for each country are and scaling up accordingly.
+
+
+# ============================================================
+# Aggregate CATF_data: one row per country
+# ============================================================
+# Each country has multiple rows (one per student). We collapse
+# them into a single row using sensible summary functions.
+#
+# General strategy:
+#   - numeric columns  → median  (robust to outliers / typos)
+#   - character columns → mode   (most common value reported)
+#
+# Feel free to swap median() for mean() or mode() on any
+# variable if you think a different choice is more appropriate.
+# ============================================================
+
+
+# --- helper function: statistical mode (most frequent value) ----
+# works for both character and numeric vectors
+stat_mode <- function(x) {
+  x <- x[!is.na(x)]
+  if (length(x) == 0) return(NA)
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# --- identify column types --------------------------------------
+numeric_cols <- CATF_data |>
+  select(where(is.numeric)) |>
+  names()
+
+character_cols <- CATF_data |>
+  select(where(is.character), -country) |>
+  names()
+
+# --- aggregate -----------------------------------------------
+CATF_clean <- CATF_data |>
+  group_by(country) |>
+  summarise(
+    # For every numeric column, take the median (ignoring NAs)
+    across(all_of(numeric_cols), function(x){ median(x, na.rm = TRUE) }),
+
+    # For every character column, take the mode
+    across(all_of(character_cols), stat_mode),
+
+    # (optional) track how many student rows were combined
+    n_sources = n()
+  )
+
+# --- quick check ---------------------------------------------
+#glimpse(CATF_clean)
+
+# How many unique countries do we have?
+#nrow(CATF_clean)
+
+# ============================================================
+# CUSTOMISATION IDEAS
+# ============================================================
+# If you'd prefer to use the mean for some variables and the
+# median for others, you can split them up like this:
+#
+# CATF_clean <- CATF_data |>
+#   group_by(country) |>
+#   summarise(
+#     # Variables where mean makes sense
+#     across(c(gdp, population),
+#            function(x){ mean(x, na.rm = TRUE) } ),
+#
+#     # Variables where median is more robust
+#     across(c(poverty_rate, hdi, median_age),
+#            function(x){ median(x, na.rm = TRUE) } ),
+#
+#     # Variables where mode makes sense (e.g. categorical-ish)
+#     across(c(renewable_target_solar, renewable_target_wind),
+#            stat_mode),
+#
+#     n_sources = n()
+#   )
+# ============================================================
+
+
+```
+
+## Introduction
+
+**Overall Theme:** How socioeconomic conditions shape electricity access and electricity system performance across African countries.
+
+**Research Goal:** Electricity systems across African countries oftentimes have unreliable and uneven distribution of coverage and quality. This project is connected to the work of Clean Air Task Force (CATF) Africa, which is developing the Electricity Sector Performance Scorecard (CATF-ESPS). It investigates whether socioeconomic conditions, especially poverty and income, are associated with electricity access and reliability across African countries. We aim to discover whether higher-poverty countries tend to have lower electrification, larger urban–rural electricity access gaps, and weaker electricity reliability, and if countries with higher electrification also have higher GDP per capita.
+
+**Target Population:** African countries included in the CATF Africa dataset.
+
+**Audience:** This project is intended for the Clean Air Task Force (CATF) Africa or policymakers, researchers, and development organizations interested in understanding electricity sector performance across African countries.
+
+## Data Summary
+
+**Key Variables:**
+
+-   poverty_rate: % of the population living below the poverty line
+-   electrification_rate: % of the population with access to electricity
+-   urban_access_electricity_rate: % of the urban population with electricity access
+-   rural_access_electricity_rate: % of the rural population with electricity access
+-   gdp: GDP per capita in USD
+-   SAIDI: Average total outage duration per customer per year
+-   SAIFI: Average number of service interruptions per customer per year
+
+**Data Wrangling:**
+
+-   Selected the variables relevant to our four research questions and removed observations with missing values for the variables used in each analysis
+-   For Q1 and Q2, created a new variable called poverty_group; for Q2, created a new variable called electricity_gap
+
+## Question #1: \[Vicky Kuang - Do higher-poverty African countries have lower electrification rates than lower-poverty African countries?\]
+
+-   Electricity access is closely tied to living conditions, economic opportunity, and development within a country.
+
+-   CATF should understand whether higher-poverty countries tend to have lower electrification rates to help identify where poverty may act as a barrier to electricity access.
+
+-   This question examines how a major socioeconomic condition, poverty, relates to electricity access across African countries.
+
+## Q1: Variables & Approach
+
+**Variables used:**
+
+-   poverty_rate
+-   electrification_rate
+
+**New variables/groups defined:**
+
+-   poverty_group: a categorical variable that divides countries into Higher-Poverty and Lower-Poverty groups based on the median poverty rate in the dataset.
+
+## Q1: Visualization
+
+```{r, echo = FALSE, include=FALSE}
+q1_country <- CATF_clean |>
+  select(country, poverty_rate, electrification_rate) |>
+  filter(
+    !is.na(poverty_rate),
+    !is.na(electrification_rate)
+  ) |>
+  mutate(
+    poverty_group = if_else(
+      poverty_rate >= median(poverty_rate, na.rm = TRUE),
+      "Higher-Poverty",
+      "Lower-Poverty"
+    )
+  )
+
+glimpse(q1_country)
+
+# plot results (histograms)
+q1_country %>%
+  ggplot(aes(x = electrification_rate)) +
+  geom_histogram(bins = 8, color = "black", fill = "gray") +
+  labs(x = "Electrification Rate (%)") +
+  facet_wrap(~poverty_group)
+
+# plot results (boxplot)
+q1_country %>%
+  ggplot(aes(x = poverty_group, y = electrification_rate)) +
+  geom_boxplot() +
+  labs(x = "Poverty Group", y = "Electrification Rate (%)")
+
+mean_obs <- 
+  q1_country %>%
+  group_by(poverty_group) %>%
+  summarise(means = mean(electrification_rate))
+
+mean_obs
+
+delta_mean_obs <- 
+  q1_country %>%
+  group_by(poverty_group) %>%
+  summarise(means = mean(electrification_rate), .groups = "drop") %>%
+  summarise(value = diff(means)) %>%
+  as.numeric()
+
+delta_mean_obs
+
+# simulation info
+num_trials <- 1000  # number of simulated values
+
+# random seed
+set.seed(130)
+
+# simulate!
+delta_mean_simulations <- rep(NA, num_trials)
+for(i in 1:num_trials){
+  # perform a random permutation
+  simdata <- 
+    q1_country %>% 
+    mutate(poverty_group = sample(poverty_group, replace = FALSE))
+  
+  # compute the simulated test statistic
+  delta_mean_sim <- 
+    simdata %>% 
+    group_by(poverty_group) %>%
+    summarise(means = mean(electrification_rate), .groups = "drop") %>%
+    summarise(value = diff(means)) %>%
+    as.numeric()
+  
+  # store the simulated value
+  delta_mean_simulations[i] <- delta_mean_sim
+}
+
+# save output to a new tibble
+simulation_results <- tibble(mean_diff = delta_mean_simulations)
+
+# plot results
+simulation_results %>%
+  ggplot(aes(x = mean_diff)) +
+  geom_histogram(bins = 30, color = "black", fill = "gray") +
+  labs(x = "Differences in Mean Electrification Rates from Random Permutations")
+
+# calculate 1-sided p-value
+pvalue_1side <- 
+  sum(delta_mean_simulations <= delta_mean_obs) / num_trials
+
+print(pvalue_1side)
+
+# run hypothesis test
+
+alpha <- 0.05  # alpha level
+reject_null <- pvalue_1side < alpha  # reject the null?
+
+print(reject_null)
+
+q1_means <- q1_country %>%
+  group_by(poverty_group) %>%
+  summarise(
+    mean_electrification = mean(electrification_rate, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r q1-plot}
+q1_means %>%
+  ggplot(aes(x = poverty_group, y = mean_electrification, fill = poverty_group)) +
+  geom_col(color = "black") +
+  labs(
+    x = "Poverty Group",
+    y = "Mean Electrification Rate (%)",
+    title = "Mean Electrification Rate by Poverty Group"
+  ) 
+```
+
+## Q1: Summary Table
+
+```{r q1-table}
+q1_summary <- q1_country %>%
+  group_by(poverty_group) %>%
+  summarise(
+    `Number of Countries` = n(),
+    `Mean Electrification Rate (%)` = round(mean(electrification_rate, na.rm = TRUE), 1),
+    `Median Electrification Rate (%)` = round(median(electrification_rate, na.rm = TRUE), 1))
+
+q1_summary %>%
+  kable(caption = "Electrification Rates by Poverty Group")
+```
+
+-   On average, higher-poverty countries have an electrification rate of about 44.3%, lower-poverty has 75.1%.
+
+-   The observed difference of about -30.7%. Since the difference is negative and large, this shows that higher poverty is associated with lower electrification rates.
+
+-   This means poverty may be a major structural barrier to electricity access; higher-poverty countries may need more targeted support for electrification.
+
+## Question #2: \[Nika Ryzhkova - Do countries with higher poverty rates tend to have a larger gap between urban and rural electricity access?\]
+
+-   Access to electricity is closely connected to living conditions and development within a country.
+
+-   However, electricity access is often not evenly distributed between urban and rural areas.
+
+-   Understanding the size of this gap is important for organizations like CATF because it helps highlight where electricity access remains uneven.
+
+## Q2: Variables & Approach
+
+**Variables used:**
+
+-   poverty_rate
+-   urban_access_electricity_rate
+-   rural_access_electricity_rate
+
+**New variables/groups defined:**
+
+-   electricity_gap: the difference between urban_access_electricity_rate and rural_access_electricity_rate, used to measure the size of the urban–rural electricity access gap.
+-   poverty_group: a categorical variable that divides countries into Low, Medium, and High poverty groups.
+
+## Q2: Visualization
+
+```{r q2-plot}
+CATF_clean$electricity_gap <- CATF_clean$urban_access_electricity_rate -
+  CATF_clean$rural_access_electricity_rate
+
+CATF_clean$poverty_group <- cut(
+  CATF_clean$poverty_rate,
+  breaks = quantile(
+    CATF_clean$poverty_rate,
+    probs = c(0, 1/3, 2/3, 1),
+    na.rm = TRUE
+  ),
+  labels = c("Low", "Medium", "High"),
+  include.lowest = TRUE
+)
+
+boxplot(
+  electricity_gap ~ poverty_group,
+  data = CATF_clean,
+  main = "Electricity Access Gap by Poverty Level",
+  xlab = "Poverty Rate",
+  ylab = "Electricity Access Gap (Urban - Rural)",
+  col = "grey",
+  border = "black"
+)
+```
+
+## Q2: Summary Table
+
+```{r q2-table}
+gap_summary <- CATF_clean |>
+  group_by(poverty_group) |>
+  summarise(
+    `Average Gap (%)` = round(mean(electricity_gap, na.rm = TRUE), 1),
+    `Median Gap (%)` = round(median(electricity_gap, na.rm = TRUE), 1),
+    .groups = "drop"
+  )
+
+kable(gap_summary, caption = "Electricity Access Gap by Poverty Level (All Countries)")
+```
+
+-   Electricity access gaps generally increase as poverty levels rise across countries.
+
+-   Largest median gap appears in the medium-poverty group (about 46.8%), indicating large urban–rural differences.
+
+-   In low-poverty countries, the average gap is smaller (around 34.6%), so electricity access is more balanced between urban and rural areas.
+
+-   High-poverty countries show large gaps at around 43.4% between electrification rates.
+
+-   This suggests that urban–rural electricity inequality exists across all poverty levels.
+
+## Question #3: \[Salma Chaoui - Does higher electrification rates relate to higher GDP per capita in African countries?\]
+
+-   Access to electricity can influence the economic growth and quality of life for citizens within a country.
+
+-   It is important for CATF to understand the relationship between electrification and GDP per capita so that they can identify the countries that need more support.
+
+-   Through this, they will be able to prioritize interventions that expand electricity access and create new energy saving solutions that benefit citizens and support economic growth and sustainability goals.
+
+## Q3: Variables & Approach
+
+**Variables used:**
+
+-   electrification_rate
+-   gdp
+
+## Q3: Visualization
+
+```{r q3-plot}
+CATF_clean |>
+  ggplot(aes(x = gdp, y = electrification_rate)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(
+    title = "Relationship Between Electrification Rate and GDP per Capita",
+    x = "GDP per Capita",
+    y = "Electrification Rate (%)"
+  ) +
+  theme_bw()
+
+model <- lm(electrification_rate ~ gdp, data = CATF_clean)
+model |> tidy()
+```
+
+## Q3: Summary Table
+
+```{r q3-table}
+CATF_clean |>
+  mutate(
+    electrification_groups = case_when(
+      electrification_rate < 30 ~ "Low (<30%)",
+      electrification_rate < 70 ~ "Medium (30-69%)",
+      TRUE ~ "High (70%+)"
+    )
+  ) |>
+  group_by(electrification_groups) |>
+  summarise(
+    Count = n(),
+    `Average GDP per Capita` = round(mean(gdp, na.rm = TRUE), 1),
+    `Median GDP per Capita` = round(median(gdp, na.rm = TRUE), 1)
+  ) |>
+  arrange(factor(
+    electrification_groups,
+    levels = c("Low (<30%)", "Medium (30-69%)", "High (70%+)")
+  )) |>
+  kable(caption = "GDP per Capita by Electrification Rate Groups in African Countries")
+```
+
+-   Scatterplot slopes show positive relationship.
+
+-   The slope is 0.004269, so for every 1-unit increase in GDP per capita, the predicted electrification rate increases by 0.427% on average.
+
+-   Intercept is 46.671821, When GDP is 0, predicted electrification rate is about 46.67%.
+
+-   Countries in high electrification group have average GDP over 3 times larger than those in medium group and over 9 times larger than those in low group.
+
+-   This shows higher electrification levels tend to have higher incomes.
+
+## Question #4: \[Yi Xuan Su - Keeping GDP per capita, urbanization rate, and electrification rate constant, is higher poverty rate associated with worse electricity reliability across African countries?\]
+
+-   Electricity reliability is an important part of meaningful electricity access. Frequent outages and long service interruptions can reduce quality of life and limit economic activity.
+
+-   Electricity reliability is measured using SAIDI, which reflects outage duration, and SAIFI, which reflects outage frequency.
+
+-   CATF should understand whether poverty rate is associated with these reliability measures after accounting for other country characteristics such as GDP per capita, urbanization rate, and electrification rate.
+
+-   This can help CATF identify countries where socioeconomic disadvantage may be linked to weaker electricity system performance and where more targeted support may be needed.
+
+## Q4: Variables & Approach
+
+**Variables used:**
+
+-   poverty_rate
+
+-   SAIDI
+
+-   SAIFI
+
+-   gdp
+
+-   urbanization_rate
+
+-   electrification_rate
+
+## Q4: Visualization
+
+```{r q4-plot}
+# SAIDI data
+q4_saidi <- CATF_clean |>
+  select(country, poverty_rate, SAIDI, gdp, urbanization_rate, electrification_rate) |>
+  filter(
+    !is.na(poverty_rate),
+    !is.na(SAIDI),
+    !is.na(gdp),
+    !is.na(urbanization_rate),
+    !is.na(electrification_rate)
+  )
+
+# SAIFI data
+q4_saifi <- CATF_clean |>
+  select(country, poverty_rate, SAIFI, gdp, urbanization_rate, electrification_rate) |>
+  filter(
+    !is.na(poverty_rate),
+    !is.na(SAIFI),
+    !is.na(gdp),
+    !is.na(urbanization_rate),
+    !is.na(electrification_rate)
+  )
+
+# poverty rate vs SAIDI
+p1 <- q4_saidi |>
+  ggplot(aes(x = poverty_rate, y = SAIDI)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  xlab("Poverty Rate") +
+  ylab("SAIDI (hours of outage per year)") +
+  labs(title = "Poverty Rate vs. SAIDI")
+
+# poverty rate vs SAIFI
+p2 <- q4_saifi |>
+  ggplot(aes(x = poverty_rate, y = SAIFI)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  xlab("Poverty Rate") +
+  ylab("SAIFI (interruptions per year)") +
+  labs(title = "Poverty Rate vs. SAIFI")
+
+plot_grid(p1, p2, ncol = 2)
+
+# multiple linear regression models
+model_saidi <- lm(SAIDI ~ poverty_rate + gdp + urbanization_rate + electrification_rate,
+                  data = q4_saidi)
+
+model_saifi <- lm(SAIFI ~ poverty_rate + gdp + urbanization_rate + electrification_rate,
+                  data = q4_saifi)
+
+model_saidi |> tidy()
+model_saifi |> tidy()
+
+# poverty coefficients only
+#beta_poverty_saidi <- model_saidi |>
+  #tidy() |>
+  #filter(term == "poverty_rate") |>
+  #select(estimate) |>
+  #pull()
+
+#beta_poverty_saifi <- model_saifi |>
+  #tidy() |>
+  #filter(term == "poverty_rate") |>
+  #select(estimate) |>
+  #pull()
+
+#beta_poverty_saidi
+#beta_poverty_saifi
+```
+
+## Q4: Summary Table
+
+```{r q4-table}
+q4_table <- tibble(
+  `Reliability measure` = c("SAIDI", "SAIFI"),
+  `Effect of higher poverty` = c(
+    round(model_saidi |> tidy() |> filter(term == "poverty_rate") |> pull(estimate), 2),
+    round(model_saifi |> tidy() |> filter(term == "poverty_rate") |> pull(estimate), 2)
+  )
+)
+
+q4_table |>
+  kable(caption = "Estimated relationship between poverty rate and electricity reliability")
+```
+
+-   Scatterplots slope upward, but the relationship is stronger for SAIDI than SAIFI.
+
+-   Poverty rate ranges from about 0.05 to 0.80, SAIDI from near 0 to over 2200 hours/year, SAIFI from about 0 to 600 interruptions/year.
+
+-   Outliers for SAIDI near 1880 and 2200 hours and SAIFI near 600.
+
+-   After controlling for development indicators, the estimated poverty effect is 1070.22 for SAIDI and 94.20 for SAIFI.
+
+-   Countries with higher poverty face longer service interruptions and weaker electricity system performance.
+
+## Overall Limitations
+
+**Data Limitations:**
+
+-   Some countries had missing values for key variables such as poverty rate, SAIDI, SAIFI, GDP per capita, urbanization rate, and electrification rate, so they could not be included in every analysis.
+
+-   The dataset only shows associations between variables but cannot prove causation.
+
+-   Some measures, especially SAIDI and SAIFI, may not be reported consistently across countries, which can affect reliability comparisons.
+
+-   Other important factors that may influence electricity access and reliability were not included in our analysis, such as infrastructure quality, government policy, population density, political stability, education, natural resources, and utility management.
+
+-   Our analysis looks at countries as a whole, so regional differences within countries, such as urban–rural variation, are not fully captured.
+
+## Overall Limitations
+
+**Future Directions:**
+
+-   Future work could use multiple years of data to examine trends over time instead of relying on a single snapshot.
+-   Additional predictors, such as installed generation capacity, transmission losses, infrastructure quality, and governance indicators, could be included to build a more complete model.
+-   More standardized and complete reporting of electricity reliability indicators would improve cross-country comparisons.
+-   Future research could also examine subnational differences to better understand inequality within countries, especially between urban and rural areas.
+
+## Overall Conclusion
+
+**Key Findings:**
+
+-   Higher-poverty African countries tended to have lower overall electrification rates than lower-poverty countries.
+
+-   Higher-poverty countries also tended to have larger urban–rural electricity access gaps, although the largest median gap appeared in the medium-poverty group in our dataset.
+
+-   Countries with higher electrification rates also tended to have higher GDP per capita, suggesting a positive relationship between electricity access and economic development.
+
+-   After controlling for GDP per capita, urbanization rate, and electrification rate, higher poverty was more clearly associated with longer electricity outages, measured by SAIDI, than with more frequent outages, measured by SAIFI.
+
+## Overall Conclusion
+
+**Connection to Theme:**
+
+Overall, our findings suggest that socioeconomic conditions are closely related to electricity access and electricity system performance across African countries. In particular, poverty appears to be linked to lower electrification, greater inequality in access between urban and rural populations, and weaker electricity reliability. These results are relevant to CATF because they help identify where electricity sector challenges may be most severe and where more targeted, equitable support may be needed.
+
+## References & Acknowledgements (if applicable)
+
+**References:**
+
+-   Clean Air Task Force (CATF) Africa dataset
+-   STA130 course materials
